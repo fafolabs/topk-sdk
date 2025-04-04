@@ -1,0 +1,80 @@
+use napi::bindgen_prelude::*;
+use napi_derive::napi;
+use topk_protos::v1::data;
+
+use crate::napi_box::NapiBox;
+
+#[napi]
+#[derive(Debug, Clone)]
+pub enum TextExpression {
+  Terms {
+    all: bool,
+    terms: Vec<Term>,
+  },
+  And {
+    #[napi(ts_type = "TextExpression")]
+    left: NapiBox<TextExpression>,
+    #[napi(ts_type = "TextExpression")]
+    right: NapiBox<TextExpression>,
+  },
+  Or {
+    #[napi(ts_type = "TextExpression")]
+    left: NapiBox<TextExpression>,
+    #[napi(ts_type = "TextExpression")]
+    right: NapiBox<TextExpression>,
+  },
+}
+
+impl TextExpression {
+  pub fn and(&self, other: &TextExpression) -> TextExpression {
+    TextExpression::And {
+      left: NapiBox(Box::new(self.clone())),
+      right: NapiBox(Box::new(other.clone())),
+    }
+  }
+
+  pub fn or(&self, other: &TextExpression) -> TextExpression {
+    TextExpression::Or {
+      left: NapiBox(Box::new(self.clone())),
+      right: NapiBox(Box::new(other.clone())),
+    }
+  }
+}
+
+impl Into<data::TextExpr> for TextExpression {
+  fn into(self) -> data::TextExpr {
+    match self {
+      TextExpression::Terms { all, terms } => {
+        data::TextExpr::terms(all, terms.into_iter().map(|t| t.into()).collect())
+      }
+      TextExpression::And { left, right } => {
+        let left_expr: data::TextExpr = left.as_ref().clone().into();
+        let right_expr: data::TextExpr = right.as_ref().clone().into();
+        data::TextExpr::and(left_expr, right_expr)
+      }
+      TextExpression::Or { left, right } => {
+        let left_expr: data::TextExpr = left.as_ref().clone().into();
+        let right_expr: data::TextExpr = right.as_ref().clone().into();
+        data::TextExpr::or(left_expr, right_expr)
+      }
+    }
+  }
+}
+
+#[napi(object)]
+#[derive(Debug, Clone)]
+pub struct Term {
+  pub token: String,
+  pub field: Option<String>,
+  pub weight: f64,
+}
+
+impl Into<data::text_expr::Term> for Term {
+  fn into(self) -> data::text_expr::Term {
+    data::text_expr::Term {
+      token: self.token,
+      field: self.field,
+      weight: self.weight as f32,
+    }
+  }
+}
